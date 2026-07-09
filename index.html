@@ -96,6 +96,13 @@
   }
   .count-unit{font-size:.38em;color:var(--gold);margin-left:6px;letter-spacing:.1em}
   .count-caption{text-align:center;color:var(--dim);font-size:12.5px;letter-spacing:.1em;margin-bottom:2px}
+  .goal-badge{
+    display:inline-block;margin:2px auto 10px;padding:7px 20px;border-radius:999px;
+    font-family:'Shippori Mincho',serif;font-weight:700;font-size:15px;letter-spacing:.1em;
+    color:#3a2a00;background:linear-gradient(135deg,var(--gold),#f0c96a);
+    box-shadow:0 4px 18px rgba(232,184,75,.35);
+  }
+  .goal-badge-wrap{text-align:center}
   .today-line{text-align:center;color:var(--dim);font-size:13.5px;margin:8px 0 14px}
   .today-line b{color:var(--lotus);font-size:16px}
 
@@ -190,15 +197,6 @@
     background:linear-gradient(135deg,var(--vermilion),#f08a4b);color:#fff;padding:13px 30px;
     border-radius:12px;font-size:16px;box-shadow:0 4px 18px rgba(232,96,61,.35);
   }
-  .log{margin-top:14px;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:7px}
-  .log-item{
-    display:flex;justify-content:space-between;align-items:center;gap:8px;
-    background:#10142e;border:1px solid rgba(255,255,255,.06);border-radius:11px;
-    padding:9px 14px;font-size:13.5px;animation:fadein .35s ease;
-  }
-  .log-item .num{color:var(--gold-soft);font-weight:700;font-variant-numeric:tabular-nums}
-  .log-item .when{color:var(--dim);font-size:11px;white-space:nowrap}
-  .empty-note{text-align:center;color:var(--dim);font-size:13px;padding:14px}
   .sync-note{text-align:center;color:var(--dim);font-size:11.5px;margin-top:10px;letter-spacing:.04em}
   .sync-note .live{color:#6fd08c}
 
@@ -322,6 +320,7 @@
   <div class="panel active" id="panel1">
     <div class="card" id="shoCard">
       <div class="deadline" id="shoDeadline"></div>
+      <div class="goal-badge-wrap"><span class="goal-badge">めざせ 2222万遍</span></div>
       <div class="stage-scene" id="buddhaScene"></div>
 
       <div class="count-caption">みんなの唱題　合計</div>
@@ -365,23 +364,23 @@
   <div class="panel" id="panel2">
     <div class="card">
       <div class="deadline" id="fujiDeadline"></div>
+      <div class="goal-badge-wrap"><span class="goal-badge">めざせ 2222人</span></div>
       <div class="section-title">TOKYO 2BE 2222 — 励まし登山</div>
       <div class="fuji-scene" id="fujiScene"></div>
       <div class="fuji-stats">
-        <div class="stat"><b id="fujiTotal">0</b><span>励まし累計</span></div>
-        <div class="stat"><b id="fujiRemain">2222</b><span>山頂まで</span></div>
+        <div class="stat"><b id="fujiTotal">0</b><span>励ました人数</span></div>
+        <div class="stat"><b id="fujiRemain">2222</b><span>山頂まで（人）</span></div>
         <div class="stat"><b id="fujiPct">0%</b><span>登頂率</span></div>
       </div>
-      <div class="goal-banner" id="goalBanner">山頂 <b>2222</b> を目指して、みんなで一歩ずつ！</div>
+      <div class="goal-banner" id="goalBanner">山頂 <b>2222人</b> を目指して、みんなで一歩ずつ！</div>
     </div>
 
     <div class="card">
-      <div class="section-title">励ました数を入力</div>
+      <div class="section-title">励ました人数を入力</div>
       <div class="fuji-form">
-        <input type="number" id="climbCount" min="1" placeholder="数を入力" inputmode="numeric">
+        <input type="number" id="climbCount" min="1" placeholder="人数を入力" inputmode="numeric">
         <button class="btn btn-climb" id="climbBtn" onclick="addClimb()">⛰ 登る！</button>
       </div>
-      <div class="log" id="climbLog"><div class="empty-note">まだ記録がありません。最初の一歩をどうぞ！</div></div>
       <div class="sync-note" id="syncNote">※みんなの入力がリアルタイムで反映されます</div>
     </div>
   </div>
@@ -789,25 +788,22 @@ function drawBuddha(idx){
 
 /* ================= 2BE 2222（富士） ================= */
 let fujiTotal = 0;
-let fujiLogs = [];   // {n, t}
 let goalCelebrated = false;
 
 window.addClimb = async function(){
   if(fujiEnded()){ toast('2222の期間は終了しました'); return; }
   const n = parseInt($('climbCount').value,10);
-  if(!n || n<1){ toast('励ました数を入力してください'); return; }
+  if(!n || n<1){ toast('励ました人数を入力してください'); return; }
   $('climbCount').value='';
   if(demo){
     fujiTotal += n;
-    fujiLogs.unshift({n, t: Date.now()});
     renderFuji();
   }else{
     try{
-      await fs.addDoc(fs.collection(db,'fujiEntries'), { n, t: fs.serverTimestamp() });
       await cloudAdd('fuji', n);
     }catch(e){ console.error(e); toast('通信エラー：もう一度お試しください'); return; }
   }
-  toast('⛰ ＋'+fmt(n)+' 前進しました！');
+  toast('⛰ ＋'+fmt(n)+' 人ぶん前進しました！');
 };
 
 function renderFuji(){
@@ -817,19 +813,9 @@ function renderFuji(){
   $('fujiPct').textContent = (fujiTotal>=FUJI_GOAL ? 100 : Math.floor(pct*10)/10) + '%';
   $('goalBanner').innerHTML = fujiTotal>=FUJI_GOAL
     ? '🎉 <b>登頂達成！TOKYO 2BE 2222 おめでとう！</b> 🎉'
-    : '山頂 <b>2,222</b> まで、あと <b>'+fmt(FUJI_GOAL-fujiTotal)+'</b>！みんなで一歩ずつ！';
+    : '山頂 <b>2,222人</b> まで、あと <b>'+fmt(FUJI_GOAL-fujiTotal)+'人</b>！みんなで一歩ずつ！';
   drawFuji(pct/100, fujiTotal>=FUJI_GOAL);
 
-  const log = $('climbLog');
-  if(fujiLogs.length===0){
-    log.innerHTML = '<div class="empty-note">まだ記録がありません。最初の一歩をどうぞ！</div>';
-  }else{
-    log.innerHTML = fujiLogs.slice(0,30).map(e=>{
-      const d = new Date(e.t);
-      const when = (d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
-      return `<div class="log-item"><span class="num">⛰ ＋${fmt(e.n)}</span><span class="when">${when}</span></div>`;
-    }).join('');
-  }
   if(fujiTotal>=FUJI_GOAL && !goalCelebrated){
     goalCelebrated=true;
     evolveFX('登頂達成', true);
@@ -937,15 +923,6 @@ function subscribe(){
   // 2222の共有合計
   fs.onSnapshot(fs.doc(db,'counters','fuji'), snap=>{
     fujiTotal = (snap.exists() && snap.data().total) || 0;
-    renderFuji();
-  });
-  // 2222の直近ログ
-  const q = fs.query(fs.collection(db,'fujiEntries'), fs.orderBy('t','desc'), fs.limit(30));
-  fs.onSnapshot(q, snap=>{
-    fujiLogs = snap.docs.map(d=>{
-      const v = d.data();
-      return { n: v.n, t: v.t && v.t.toMillis ? v.t.toMillis() : Date.now() };
-    });
     renderFuji();
   });
 }
