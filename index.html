@@ -483,12 +483,58 @@ async function initFirebase(){
   }
 }
 
-/* 共有カウンタへの加算（原子的increment・ドキュメント自動作成） */
+/* 共有カウンタへの加算（原子的increment・ドキュメント自動作成）
+   失敗時は例外を投げる。保持と自動再送は呼び出し側（flush）が担う。 */
 async function cloudAdd(counter, n){
-  if(demo) return;
+  await fs.setDoc(fs.doc(db,'counters',counter), { total: fs.increment(n) }, { merge:true });
+}
+
+/* ===== 送信アウトボックス（失敗しても失われず自動再送） =====
+   未送信ぶんを localStorage に永続化。リロード・クラッシュ後も次回起動で再送する。 */
+let outbox = { sho:0, fuji:0 };
+try{ outbox = Object.assign({sho:0,fuji:0}, JSON.parse(localStorage.getItem('tokyo2be-outbox')||'{}')); }catch(e){}
+function saveOutbox(){ try{ localStorage.setItem('tokyo2be-outbox', JSON.stringify(outbox)); }catch(e){} }
+let flushing = false;
+let offlineNotified = false;
+
+/* 送信待ちに積む。表示には即反映されるので数字は下がらない。 */
+function enqueue(counter, n){
+  n = Math.floor(n);
+  if(n < 1) return;
+  if(demo){
+    if(counter==='sho'){ sharedTotal += n; renderSho(); }
+    else{ fujiTotal += n; renderFuji(); }
+    return;
+  }
+  outbox[counter] += n;
+  saveOutbox();
+  flush();
+}
+
+/* アウトボックスをまとめて送信。送れた分だけ確定的に減算し、失敗分は残して再送する。 */
+async function flush(){
+  if(demo || flushing || !db) return;
+  flushing = true;
   try{
-    await fs.setDoc(fs.doc(db,'counters',counter), { total: fs.increment(n) }, { merge:true });
-  }catch(e){ console.error('加算エラー', e); toast('通信エラー：あとで自動再送されます'); }
+    for(const counter of ['sho','fuji']){
+      const n = outbox[counter];
+      if(n < 1) continue;
+      try{
+        await cloudAdd(counter, n);
+        outbox[counter] -= n;      // 送信中に増えた分は残す
+        saveOutbox();
+        if(offlineNotified){ offlineNotified = false; toast('接続が回復し、未送信ぶんを送信しました ✓'); }
+      }catch(e){
+        console.error('送信失敗（自動再送します）:', counter, e);
+        if(!offlineNotified){ offlineNotified = true; toast('通信が不安定です。未送信ぶんは自動で再送します'); }
+        // outboxに残したまま → 次回のflushで再送
+      }
+    }
+  }finally{
+    flushing = false;
+  }
+  renderSho();
+  renderFuji();
 }
 
 /* ================= 2BE唱 ================= */
@@ -513,7 +559,7 @@ let running=false, runStart=0, runPrev=0, tickHandle=null, lastStageIdx=-1, fxPl
 try{ my = JSON.parse(localStorage.getItem('tokyo2be-my')||'{"total":0}'); }catch(e){}
 function saveMy(){ try{ localStorage.setItem('tokyo2be-my', JSON.stringify(my)); }catch(e){} }
 
-function displayTotal(){ return sharedTotal + uncommitted; }
+function displayTotal(){ return sharedTotal + uncommitted + outbox.sho; }
 
 function stageOf(total){
   let idx=0;
@@ -555,10 +601,9 @@ function tick(){
 function commitUncommitted(){
   const n = Math.floor(uncommitted);
   if(n < 1) return;
-  uncommitted -= n;
-  if(demo){ sharedTotal += n; renderSho(); }
-  else{ cloudAdd('sho', n); }
+  uncommitted -= n;   // outboxへ移すだけなので displayTotal は変わらない（数字は下がらない）
   saveMy();
+  enqueue('sho', n);
 }
 
 window.addByMinutes = function(){
@@ -569,8 +614,7 @@ window.addByMinutes = function(){
 function applyAdd(hen){
   if(shoEnded()){ toast('2BE唱の期間は終了しました'); return; }
   my.total += hen; saveMy();
-  if(demo){ sharedTotal += hen; }
-  else{ cloudAdd('sho', hen); }
+  enqueue('sho', hen);
   renderSho();
   toast('＋'+fmt(hen)+' 遍 を追加しました');
 }
@@ -806,33 +850,28 @@ function drawBuddha(idx){
 let fujiTotal = 0;
 let goalCelebrated = false;
 
-window.addClimb = async function(){
+window.addClimb = function(){
   if(fujiEnded()){ toast('2222の期間は終了しました'); return; }
   const n = parseInt($('climbCount').value,10);
   if(!n || n<1){ toast('励ました人数を入力してください'); return; }
   $('climbCount').value='';
-  if(demo){
-    fujiTotal += n;
-    renderFuji();
-  }else{
-    try{
-      await cloudAdd('fuji', n);
-    }catch(e){ console.error(e); toast('通信エラー：もう一度お試しください'); return; }
-  }
+  enqueue('fuji', n);
+  renderFuji();
   toast('⛰ ＋'+fmt(n)+' 人ぶん前進しました！');
 };
 
 function renderFuji(){
-  const pct = Math.min(100, fujiTotal/FUJI_GOAL*100);
-  $('fujiTotal').textContent = fmt(fujiTotal);
-  $('fujiRemain').textContent = fmt(Math.max(0, FUJI_GOAL-fujiTotal));
-  $('fujiPct').textContent = (fujiTotal>=FUJI_GOAL ? 100 : Math.floor(pct*10)/10) + '%';
-  $('goalBanner').innerHTML = fujiTotal>=FUJI_GOAL
+  const total = fujiTotal + outbox.fuji;
+  const pct = Math.min(100, total/FUJI_GOAL*100);
+  $('fujiTotal').textContent = fmt(total);
+  $('fujiRemain').textContent = fmt(Math.max(0, FUJI_GOAL-total));
+  $('fujiPct').textContent = (total>=FUJI_GOAL ? 100 : Math.floor(pct*10)/10) + '%';
+  $('goalBanner').innerHTML = total>=FUJI_GOAL
     ? '🎉 <b>登頂達成！TOKYO 2BE 2222 おめでとう！</b> 🎉'
-    : '山頂 <b>2,222人</b> まで、あと <b>'+fmt(FUJI_GOAL-fujiTotal)+'人</b>！みんなで一歩ずつ！';
-  drawFuji(pct/100, fujiTotal>=FUJI_GOAL);
+    : '山頂 <b>2,222人</b> まで、あと <b>'+fmt(FUJI_GOAL-total)+'人</b>！みんなで一歩ずつ！';
+  drawFuji(pct/100, total>=FUJI_GOAL);
 
-  if(fujiTotal>=FUJI_GOAL && !goalCelebrated){
+  if(total>=FUJI_GOAL && !goalCelebrated){
     goalCelebrated=true;
     evolveFX('登頂達成', true);
     toast('🎌 登頂！2222達成おめでとうございます！');
@@ -953,8 +992,11 @@ function subscribe(){
   renderFuji();
   await initFirebase();
   subscribe();
-  window.addEventListener('beforeunload', ()=>{ if(running){ tick(); commitUncommitted(); } });
-  document.addEventListener('visibilitychange', ()=>{ if(document.hidden && running){ commitUncommitted(); } });
+  flush();                                   // 前回セッションの未送信ぶんを再送
+  setInterval(flush, 15000);                 // 15秒ごとに自動再送
+  window.addEventListener('online', flush);  // 回線復帰時に即再送
+  window.addEventListener('beforeunload', ()=>{ if(running){ tick(); } commitUncommitted(); });
+  document.addEventListener('visibilitychange', ()=>{ if(document.hidden){ if(running) commitUncommitted(); flush(); } });
   ['addMinutes','climbCount'].forEach(id=>{
     $(id).addEventListener('keydown', e=>{
       if(e.key==='Enter'){
