@@ -343,7 +343,7 @@
 
       <div class="count-caption">みんなの唱題　合計</div>
       <div class="count-big"><span id="totalCount">0</span><span class="count-unit">遍</span></div>
-      <div class="today-line">あなたの今回 <b id="sessCount">0</b> 遍　・　あなたの累計 <span id="myTotal">0</span> 遍</div>
+      <div class="today-line">あなたの今回 <b id="sessCount">0</b> 遍</div>
 
       <div class="timer-row">
         <div class="timer-clock" id="timerClock">00:00</div>
@@ -553,11 +553,7 @@ const STAGES = [
 let sharedTotal = 0;        // 共有合計（Firestoreから）
 let sess = 0;               // 今回のセッション（未送信ぶん含む）
 let uncommitted = 0;        // まだクラウドに送っていない遍数
-let my = { total:0 };       // 自分の累計（この端末）
 let running=false, runStart=0, runPrev=0, tickHandle=null, lastStageIdx=-1, fxPlayedFinal=false;
-
-try{ my = JSON.parse(localStorage.getItem('tokyo2be-my')||'{"total":0}'); }catch(e){}
-function saveMy(){ try{ localStorage.setItem('tokyo2be-my', JSON.stringify(my)); }catch(e){} }
 
 function displayTotal(){ return sharedTotal + uncommitted + outbox.sho; }
 
@@ -591,18 +587,15 @@ function tick(){
   const delta = earned - runPrev;
   runPrev = earned;
   sess += delta; uncommitted += delta;
-  my.total += delta;
   const m = Math.floor(secTotal/60), s = Math.floor(secTotal%60);
   $('timerClock').textContent = String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
   renderSho();
   if(Math.floor(secTotal) % 30 === 0 && Math.floor(secTotal) > 0) commitUncommitted();
-  if(Math.floor(secTotal) % 20 === 0) saveMy();
 }
 function commitUncommitted(){
   const n = Math.floor(uncommitted);
   if(n < 1) return;
   uncommitted -= n;   // outboxへ移すだけなので displayTotal は変わらない（数字は下がらない）
-  saveMy();
   enqueue('sho', n);
 }
 
@@ -613,7 +606,6 @@ window.addByMinutes = function(){
 };
 function applyAdd(hen){
   if(shoEnded()){ toast('2BE唱の期間は終了しました'); return; }
-  my.total += hen; saveMy();
   enqueue('sho', hen);
   renderSho();
   toast('＋'+fmt(hen)+' 遍 を追加しました');
@@ -623,7 +615,6 @@ function renderSho(){
   const total = displayTotal();
   $('totalCount').textContent = fmt(total);
   $('sessCount').textContent = fmt(sess);
-  $('myTotal').textContent = fmt(my.total);
   const idx = stageOf(total);
   const st = STAGES[idx], next = STAGES[idx+1];
   if(next){
