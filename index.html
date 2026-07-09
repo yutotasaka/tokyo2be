@@ -168,6 +168,24 @@
     box-shadow:0 0 12px rgba(232,96,61,.8);
   }
 
+  /* ===== ご祈念項目 ===== */
+  .prayer-list{list-style:none;counter-reset:pray;display:flex;flex-direction:column;gap:10px}
+  .prayer-list li{
+    counter-increment:pray;position:relative;
+    padding:13px 16px 13px 48px;border-radius:12px;
+    background:#10142e;border:1px solid var(--line);
+    font-size:14px;line-height:1.75;letter-spacing:.02em;color:var(--moon);
+  }
+  .prayer-list li::before{
+    content:counter(pray);
+    position:absolute;left:12px;top:13px;
+    width:24px;height:24px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Shippori Mincho',serif;font-weight:700;font-size:13px;
+    color:#3a2a00;background:linear-gradient(135deg,var(--gold),#f0c96a);
+    box-shadow:0 2px 8px rgba(232,184,75,.3);
+  }
+
   /* ===== 2222 ===== */
   .fuji-scene{position:relative}
   .fuji-scene svg{width:100%;height:auto;display:block;border-radius:14px}
@@ -344,18 +362,22 @@
     </div>
 
     <div class="card">
+      <div class="section-title">ご祈念項目</div>
+      <ol class="prayer-list">
+        <li>第2総東京学生部全員の幸福、健康・無事故、大勝利、所願満足</li>
+        <li>第2総東京学生部の異体同心の団結、常寂光土にする</li>
+        <li>第2総東京学生部の人間革命、宿命転換の成就</li>
+        <li>日本一の弘教拡大の結果を以て、池田先生にご恩返しをする</li>
+        <li>TOKYO2BE#2222の達成</li>
+        <li>「SOKA青年総会」の大晴天、無事故、大成功</li>
+      </ol>
+    </div>
+
+    <div class="card">
       <div class="section-title">あとから記録を追加</div>
       <div class="manual-grid">
         <input type="number" id="addMinutes" min="1" placeholder="分" inputmode="numeric">
         <button class="btn btn-mini" onclick="addByMinutes()">分で追加</button>
-        <input type="number" id="addHen" min="1" placeholder="遍" inputmode="numeric">
-        <button class="btn btn-mini" onclick="addByHen()">遍で追加</button>
-      </div>
-      <div class="quick-row">
-        <button class="chip" onclick="quickAdd(5)">＋5分</button>
-        <button class="chip" onclick="quickAdd(15)">＋15分</button>
-        <button class="chip" onclick="quickAdd(30)">＋30分</button>
-        <button class="chip" onclick="quickAdd(60)">＋1時間</button>
       </div>
     </div>
   </div>
@@ -539,16 +561,10 @@ function commitUncommitted(){
   saveMy();
 }
 
-window.quickAdd = function(min){ applyAdd(min*50); };
 window.addByMinutes = function(){
   const v = parseInt($('addMinutes').value,10);
   if(!v || v<1){ toast('分数を入力してください'); return; }
   $('addMinutes').value=''; applyAdd(v*50);
-};
-window.addByHen = function(){
-  const v = parseInt($('addHen').value,10);
-  if(!v || v<1){ toast('遍数を入力してください'); return; }
-  $('addHen').value=''; applyAdd(v);
 };
 function applyAdd(hen){
   if(shoEnded()){ toast('2BE唱の期間は終了しました'); return; }
@@ -939,11 +955,10 @@ function subscribe(){
   subscribe();
   window.addEventListener('beforeunload', ()=>{ if(running){ tick(); commitUncommitted(); } });
   document.addEventListener('visibilitychange', ()=>{ if(document.hidden && running){ commitUncommitted(); } });
-  ['addMinutes','addHen','climbCount'].forEach(id=>{
+  ['addMinutes','climbCount'].forEach(id=>{
     $(id).addEventListener('keydown', e=>{
       if(e.key==='Enter'){
         if(id==='addMinutes') window.addByMinutes();
-        else if(id==='addHen') window.addByHen();
         else window.addClimb();
       }
     });
