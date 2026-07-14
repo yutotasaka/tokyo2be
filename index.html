@@ -455,10 +455,11 @@
       <div class="section-title">達成ペース</div>
       <div class="pace-status" id="paceStatusFuji">計算中…</div>
       <div class="fuji-stats">
-        <div class="stat"><b id="paceReqFuji">–</b><span>全体の必要ペース（人/日）</span></div>
+        <div class="stat"><b id="paceReqFuji">–</b><span>150人ぜんいん合計（人/日）</span></div>
         <div class="stat"><b id="paceRemainFuji">–</b><span>残り人数</span></div>
         <div class="stat"><b id="paceDaysFuji">–</b><span>残り日数</span></div>
       </div>
+      <div class="pace-compare" id="paceNoteFuji"></div>
     </div>
 
     <div class="card">
@@ -600,17 +601,21 @@ function renderPaceFuji(){
   if(done){
     el.textContent = '🎉 2222人 達成！おめでとうございます！';
     el.className = 'pace-status ps-ahead';
+    $('paceNoteFuji').textContent = '';
   }else if(fujiEnded()){
     el.textContent = '期間終了 — おつかれさまでした！';
     el.className = 'pace-status ps-slight';
+    $('paceNoteFuji').textContent = '';
   }else{
-    // 1人あたりの必要ペース（150人で割る）
-    const perPerson = p.reqPerDay / MEMBERS;      // 1日あたり何人
-    const daysPer1  = perPerson > 0 ? 1/perPerson : 0;  // 1人励ますのに何日
-    const txt = perPerson >= 1
-      ? '1人あたり 1日 '+fmt1(perPerson)+' 人'
-      : '1人あたり '+fmt1(daysPer1)+' 日に 1人';
-    el.textContent = '達成には ' + txt + ' のペースが必要です';
+    // 1人あたりの必要ペース：月・週で表現（日割りだと小数になり実感が湧かないため）
+    const perPersonTotal = p.remain / MEMBERS;              // 期間内に1人が励ます人数
+    const perMonth = (p.reqPerDay / MEMBERS) * 30;          // 1人あたり月◯人
+    const perWeek  = (p.reqPerDay / MEMBERS) * 7;           // 1人あたり週◯人
+    el.innerHTML = '達成には <b>1人あたり 月 '+fmt1(perMonth)+' 人</b>'
+      + '（週 '+fmt1(perWeek)+' 人）のペースが必要です';
+    $('paceNoteFuji').innerHTML =
+      '＝ 残り'+Math.max(0,Math.ceil(p.remainDays))+'日で、1人が <b>'+fmt1(perPersonTotal)+' 人</b> を励ます計算'
+      + '（'+MEMBERS+'人ぜんいんで取り組んだ場合）';
     el.className = 'pace-status ps-ontrack';
   }
 
