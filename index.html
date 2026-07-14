@@ -455,9 +455,9 @@
       <div class="section-title">達成ペース</div>
       <div class="pace-status" id="paceStatusFuji">計算中…</div>
       <div class="fuji-stats">
-        <div class="stat"><b id="paceReqFuji">–</b><span>1日の必要ペース（人）</span></div>
-        <div class="stat"><b id="paceExpFuji">–</b><span>今日の予定ライン（人）</span></div>
-        <div class="stat"><b id="paceDiffFuji">–</b><span>予定との差（人）</span></div>
+        <div class="stat"><b id="paceReqFuji">–</b><span>全体の必要ペース（人/日）</span></div>
+        <div class="stat"><b id="paceRemainFuji">–</b><span>残り人数</span></div>
+        <div class="stat"><b id="paceDaysFuji">–</b><span>残り日数</span></div>
       </div>
     </div>
 
@@ -545,37 +545,40 @@ const fmtMan = n => {
   return Math.floor(n).toLocaleString('ja-JP');
 };
 
-/* 開始→締切を均等ペースとした計画に対する現在地を計算 */
-function paceOf(total, goal, start, end){
+/* 開始→締切を均等ペースとした計画に対する現在地を計算。
+   planPerDay を渡すと、その1日ペースを「標準」として判定する。 */
+function paceOf(total, goal, start, end, planPerDay){
   const now = Date.now();
   const totalDays  = (end - start)/86400000;
   const elapsed    = Math.max(0, Math.min(totalDays, (now - start)/86400000));
   const remainDays = Math.max(0, (end - now)/86400000);
   const remain     = Math.max(0, goal - total);
-  const dailyPlan  = goal/totalDays;                       // 計画上の1日ペース
-  const expected   = dailyPlan*elapsed;                    // 今日あるべき数
-  const reqPerDay  = remainDays > 0 ? remain/remainDays : remain;  // 今後の必要ペース
-  const diffDays   = (total - expected)/dailyPlan;         // 予定より何日ぶん先/後か
+  const dailyPlan  = planPerDay || goal/totalDays;         // 標準の1日ペース
+  const expected   = Math.min(goal, dailyPlan*elapsed);    // 今日あるべき数（目標で頭打ち）
+  const reqPerDay  = remainDays > 0 ? remain/remainDays : remain;  // 締切までの必要ペース
+  const diffDays   = (total - expected)/dailyPlan;         // 標準より何日ぶん先/後か
   return { totalDays, elapsed, remainDays, remain, dailyPlan, expected, reqPerDay, diffDays };
-}
-
-function paceStatus(p, achieved, ended){
-  if(achieved) return { cls:'ps-ahead',   msg:'🎉 目標達成！おめでとうございます！' };
-  if(ended)    return { cls:'ps-slight',  msg:'期間終了 — おつかれさまでした！' };
-  if(p.diffDays >=  1) return { cls:'ps-ahead',   msg:'🔥 予定より '+fmt1(p.diffDays)+' 日ぶん先行中！この調子！' };
-  if(p.diffDays >= -1) return { cls:'ps-ontrack', msg:'✨ 順調です — ほぼ予定通りのペース' };
-  if(p.diffDays >= -7) return { cls:'ps-slight',  msg:'⏳ 予定より '+fmt1(-p.diffDays)+' 日ぶん遅れ — まだ挽回できる！' };
-  return { cls:'ps-behind', msg:'💪 予定より '+fmt1(-p.diffDays)+' 日ぶん遅れ — ここから巻き返そう！' };
 }
 
 function renderPaceSho(){
   const total = displayTotal();
   const p = paceOf(total, FINAL_GOAL, SHO_START, SHO_END);
-  const st = paceStatus(p, total >= FINAL_GOAL, shoEnded());
   const el = $('paceStatusSho');
-  el.textContent = st.msg;
-  el.className = 'pace-status '+st.cls;
-  if(shoEnded() || total >= FINAL_GOAL){
+  const done = total >= FINAL_GOAL;
+
+  if(done){
+    el.textContent = '🎉 2222万遍 達成！おめでとうございます！';
+    el.className = 'pace-status ps-ahead';
+  }else if(shoEnded()){
+    el.textContent = '期間終了 — おつかれさまでした！';
+    el.className = 'pace-status ps-slight';
+  }else{
+    const minPerPerson = Math.ceil(p.reqPerDay/50/MEMBERS);   // 1人あたりの必要分数/日
+    el.textContent = '達成には 1人あたり 1日 '+minPerPerson+' 分 の唱題が必要です';
+    el.className = 'pace-status ps-ontrack';
+  }
+
+  if(done || shoEnded()){
     $('paceReqSho').textContent = '—';
     $('paceHrsSho').textContent = '—';
     $('pacePpSho').textContent  = '—';
@@ -584,23 +587,36 @@ function renderPaceSho(){
     $('paceHrsSho').textContent = fmt1(p.reqPerDay/50/60)+'時間';
     $('pacePpSho').textContent  = Math.ceil(p.reqPerDay/50/MEMBERS)+'分';
   }
-  const diff = total - p.expected;
   $('paceCmpSho').innerHTML =
-    '今日の予定ライン <b>'+fmtMan(p.expected)+'遍</b> ／ 現在 <b>'+fmtMan(total)+'遍</b>'
-    +'（予定比 <b>'+(diff>=0?'＋':'－')+fmtMan(Math.abs(diff))+'遍</b>）';
+    '残り <b>'+fmtMan(p.remain)+'遍</b> ／ 残り <b>'+Math.max(0,Math.ceil(p.remainDays))+'日</b>';
 }
 
 function renderPaceFuji(){
   const total = fujiTotal + outbox.fuji;
   const p = paceOf(total, FUJI_GOAL, FUJI_START, FUJI_END);
-  const st = paceStatus(p, total >= FUJI_GOAL, fujiEnded());
   const el = $('paceStatusFuji');
-  el.textContent = st.msg;
-  el.className = 'pace-status '+st.cls;
-  const diff = total - p.expected;
-  $('paceReqFuji').textContent  = (fujiEnded() || total >= FUJI_GOAL) ? '—' : fmt1(Math.ceil(p.reqPerDay*10)/10);
-  $('paceExpFuji').textContent  = fmt(p.expected);
-  $('paceDiffFuji').textContent = (diff>=0?'＋':'－')+fmt(Math.abs(diff));
+  const done = total >= FUJI_GOAL;
+
+  if(done){
+    el.textContent = '🎉 2222人 達成！おめでとうございます！';
+    el.className = 'pace-status ps-ahead';
+  }else if(fujiEnded()){
+    el.textContent = '期間終了 — おつかれさまでした！';
+    el.className = 'pace-status ps-slight';
+  }else{
+    // 1人あたりの必要ペース（150人で割る）
+    const perPerson = p.reqPerDay / MEMBERS;      // 1日あたり何人
+    const daysPer1  = perPerson > 0 ? 1/perPerson : 0;  // 1人励ますのに何日
+    const txt = perPerson >= 1
+      ? '1人あたり 1日 '+fmt1(perPerson)+' 人'
+      : '1人あたり '+fmt1(daysPer1)+' 日に 1人';
+    el.textContent = '達成には ' + txt + ' のペースが必要です';
+    el.className = 'pace-status ps-ontrack';
+  }
+
+  $('paceReqFuji').textContent  = done ? '—' : fmt1(Math.ceil(p.reqPerDay*10)/10);
+  $('paceRemainFuji').textContent = fmt(p.remain);
+  $('paceDaysFuji').textContent = Math.max(0, Math.ceil(p.remainDays)) + '日';
 }
 
 /* ================= Firebase 初期化 ================= */
